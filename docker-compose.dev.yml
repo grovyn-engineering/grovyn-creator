@@ -1,0 +1,55 @@
+# Development infrastructure only — Postgres and Redis.
+#
+# The apps themselves run on the host under `npm run dev`, so that hot reload,
+# debugger attach, and `prisma studio` all behave normally. `docker-compose.yml`
+# is the one that containerises the apps for a production-shaped run.
+#
+#   npm run infra:up      start
+#   npm run infra:logs    follow
+#   npm run infra:down    stop (add -v to also drop the data volume)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: socialpilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: socialpilot
+      POSTGRES_PASSWORD: socialpilot
+      POSTGRES_DB: socialpilot
+      # Deterministic collation, so ORDER BY on text does not depend on the
+      # host's locale — the same query must sort identically everywhere.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # Both flags matter: without -U the check runs as `root` and fails even
+      # though the server is up.
+      test: ["CMD-SHELL", "pg_isready -U socialpilot -d socialpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: socialpilot-redis
+    restart: unless-stopped
+    # BullMQ requires eviction to be disabled: if Redis evicts a job hash under
+    # memory pressure the queue silently loses work.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  postgres-data:
+  redis-data:

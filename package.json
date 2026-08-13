@@ -1,0 +1,38 @@
+{
+  "name": "socialpilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Instagram automation platform — workspaces, workflows, and a webhook-driven execution engine.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:api": "npm run dev --workspace @socialpilot/api",
+    "dev:web": "npm run dev --workspace @socialpilot/web",
+    "dev:worker": "npm run dev:worker --workspace @socialpilot/api",
+    "build": "npm run build --workspace @socialpilot/contracts && npm run build --workspace @socialpilot/api && npm run build --workspace @socialpilot/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace @socialpilot/web",
+    "db:generate": "npm run db:generate --workspace @socialpilot/api",
+    "db:migrate": "npm run db:migrate --workspace @socialpilot/api",
+    "db:deploy": "npm run db:deploy --workspace @socialpilot/api",
+    "db:seed": "npm run db:seed --workspace @socialpilot/api",
+    "db:reset": "npm run db:reset --workspace @socialpilot/api",
+    "db:studio": "npm run db:studio --workspace @socialpilot/api",
+    "infra:up": "docker compose -f docker-compose.dev.yml up -d",
+    "infra:down": "docker compose -f docker-compose.dev.yml down",
+    "infra:logs": "docker compose -f docker-compose.dev.yml logs -f"
+  },
+  "devDependencies": {
+    "npm-run-all2": "^8.0.4",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  }
+}
