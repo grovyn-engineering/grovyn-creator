@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+/*
+ * SocialPilot design system.
+ *
+ * Light mode only, by product decision — there is no dark palette and no
+ * toggle. That is a constraint worth stating in the stylesheet rather than
+ * discovering: it means every colour below can be tuned for one background,
+ * and contrast ratios are fixed rather than doubled.
+ *
+ * The visual identity is discipline rather than effect. Near-black primary
+ * actions, one accent hue used only where something is genuinely active, a
+ * single restrained shadow scale, and hairline borders doing most of the
+ * structural work. No gradients, no glass, no large shadows.
+ */
+
+@theme {
+  /* ── Neutrals ────────────────────────────────────────────────────────
+   * A cool grey ramp with a trace of blue. Pure greys read as flat and
+   * slightly cheap on a white page; a few degrees of blue makes large
+   * surfaces feel intentional without reading as tinted.
+   */
+  --color-ink-50: #f7f8fa;
+  --color-ink-100: #eef0f4;
+  --color-ink-200: #e2e5eb;
+  --color-ink-300: #cbd0da;
+  --color-ink-400: #9aa2b1;
+  --color-ink-500: #6b7383;
+  --color-ink-600: #4d5462;
+  --color-ink-700: #3a4049;
+  --color-ink-800: #24282f;
+  --color-ink-900: #15181d;
+  --color-ink-950: #0b0d10;
+
+  /* ── Accent ──────────────────────────────────────────────────────────
+   * One hue, used sparingly: active navigation, focus rings, the WHEN/IF/THEN
+   * rail, selected states. Deliberately not used for primary buttons — those
+   * are near-black, which reads as more expensive and leaves the accent free
+   * to mean "this is active" rather than "this is a button".
+   */
+  --color-accent-50: #eef2ff;
+  --color-accent-100: #e0e7ff;
+  --color-accent-200: #c7d2fe;
+  --color-accent-300: #a5b4fc;
+  --color-accent-400: #818cf8;
+  --color-accent-500: #6366f1;
+  --color-accent-600: #4f46e5;
+  --color-accent-700: #4338ca;
+
+  /* ── Semantic ────────────────────────────────────────────────────────
+   * Each is a pair: a saturated tone for text and icons, and a wash for
+   * backgrounds. Both are tuned against white specifically.
+   */
+  --color-success-50: #ecfdf5;
+  --color-success-200: #a7f3d0;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-200: #fde68a;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-200: #fecaca;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* ── Surfaces ────────────────────────────────────────────────────────
+   * The page is very slightly off-white and cards are pure white, so a card
+   * separates from the page by luminance alone. That is what allows the
+   * shadows to stay almost invisible.
+   */
+  --color-canvas: #fafbfc;
+  --color-surface: #ffffff;
+  --color-border: #e6e8ee;
+  --color-border-strong: #d3d7e0;
+
+  /* ── Type ────────────────────────────────────────────────────────────
+   * A system stack rather than a downloaded webfont: it renders immediately,
+   * needs no network at build time, and on every target platform resolves to
+   * a face designed for UI at small sizes.
+   */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", "Roboto Mono",
+    Menlo, Consolas, monospace;
+
+  /* Radii: restrained. Large radii on cards read as consumer, not enterprise. */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+
+  /* ── Elevation ───────────────────────────────────────────────────────
+   * Two very soft layers rather than one dark blur. A single blurred shadow
+   * reads as a drop shadow; a tight contact shadow plus a wider ambient one
+   * reads as a surface sitting on a page.
+   */
+  --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.05), 0 1px 3px 0 rgb(16 24 40 / 0.04);
+  --shadow-md: 0 2px 4px -2px rgb(16 24 40 / 0.06), 0 4px 8px -2px rgb(16 24 40 / 0.06);
+  --shadow-lg: 0 4px 6px -2px rgb(16 24 40 / 0.05), 0 12px 16px -4px rgb(16 24 40 / 0.08);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    /* Anchor navigation should not land content flush against the sticky header. */
+    scroll-padding-top: 5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    /* Antialiasing makes the system stack noticeably lighter and more even at
+       the sizes this UI uses. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /*
+   * Headings get negative tracking that scales with size. Type set at default
+   * tracking looks loose at display sizes — this is most of what separates
+   * "designed" from "default" in a UI like this.
+   */
+  h1, h2, h3, h4 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  h1 { letter-spacing: -0.03em; }
+
+  p, li {
+    text-wrap: pretty;
+  }
+
+  /*
+   * Focus is visible and consistent everywhere, and uses :focus-visible so a
+   * mouse click does not leave a ring behind while keyboard navigation always
+   * does. Accessibility requirement, not decoration.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  /* Tabular figures in data contexts, so columns of numbers align. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-100);
+    color: var(--color-ink-950);
+  }
+
+  /* Honour the OS setting. Every transition in the app is an affordance, not
+     content, so removing them costs nothing. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /*
+   * Skeleton shimmer. A slow, low-contrast sweep — a fast or high-contrast
+   * one draws attention to the loading state instead of away from it.
+   */
+  @keyframes sp-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-ink-100) 0%,
+      var(--color-ink-50) 50%,
+      var(--color-ink-100) 100%
+    );
+    background-size: 200% 100%;
+    animation: sp-shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* Visible only to screen readers. Used for live regions and skip links. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
