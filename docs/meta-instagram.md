@@ -193,7 +193,7 @@ Every `POST` carries `X-Hub-Signature-256: sha256=<hex>`, an HMAC-SHA256 of the
 raw request body keyed with the app secret.
 
 SocialPilot verifies against the **raw received bytes**, which is why
-`apps/api/src/app.ts` captures `req.rawBody` for this route specifically.
+`backend/src/app.ts` captures `req.rawBody` for this route specifically.
 Re-serialising the parsed object would change key order and unicode escaping,
 and the signature would never match.
 

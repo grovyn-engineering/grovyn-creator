@@ -43,19 +43,31 @@ for signed-in users without demanding a session can still see one.
 `req.workspace` existing *is* the proof that authorization ran — handlers read
 `req.workspace.id` and pass it into repositories that require it.
 
-## The contracts package
+## Contracts, and the three copies of them
 
-`@socialpilot/contracts` holds every Zod schema and enum. Both apps import it,
-so a request shape cannot drift between client and server.
+`backend/src/contracts/` is authoritative. Two other copies exist, and neither
+duplication is avoidable:
+
+| Copy | Why it cannot import the others |
+| --- | --- |
+| `backend/prisma/schema.prisma` | Prisma cannot import Zod |
+| `frontend/types/` | Importing the backend would make the frontend's build depend on it, which is exactly the coupling this architecture removes |
+
+The duplication is unavoidable; the *drift* is not. Two tests close it:
+
+- `enum-parity.test.ts` — Prisma ↔ backend contracts.
+- `contract-drift.test.ts` — backend contracts ↔ `frontend/types/`. It reads the
+  frontend's files **as text** rather than importing them, so the check exists
+  only at test time and nothing survives into either build. If `frontend/` is
+  absent, it skips.
+
+Without these, a member added on one side surfaces much later as a value the
+database accepts and the API rejects, or one the API returns and the UI cannot
+render.
 
 Frontend validation exists for latency. The server is always the real gate, and
 `validateBody` replaces the raw value with the parsed one so a handler
 downstream cannot accidentally read an unvalidated field.
-
-Prisma declares the same enums independently — it cannot import Zod, and the
-browser cannot import Prisma. `enum-parity.test.ts` fails the build if the two
-disagree, because otherwise the mismatch surfaces much later as a value the
-database accepts and the API rejects.
 
 ## Multi-tenancy
 

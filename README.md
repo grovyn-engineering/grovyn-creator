@@ -1,146 +1,169 @@
-# SocialPilot
+# Instagram SaaS
 
 Instagram automation with a record of everything it did.
 
 Connect an Instagram professional account, describe what should happen when
-someone comments or sends a message, and SocialPilot handles it — keeping a
+someone comments or sends a message, and the system handles it — keeping a
 per-run record of what matched, what ran, and what Instagram said back.
 
-> **Name notice.** "SocialPilot" is an existing commercial social-media product
-> (socialpilot.co). This project is unrelated and the name carries a real
-> trademark collision if published. Branding is confined to
-> `apps/web/components/brand/logo.tsx` and a handful of strings, so renaming is
-> a contained change.
+> **Name notice.** The product is currently branded "SocialPilot", which is an
+> existing commercial product (socialpilot.co). This project is unrelated and
+> the name carries a real trademark collision if published. Branding is confined
+> to `frontend/components/brand/logo.tsx` and a handful of strings.
 
 ---
 
-## What it does
-
-```
-Sign up  →  Workspace created  →  Connect Instagram  →  Build a workflow
-                                                              │
-                          Instagram webhook ──────────────────┘
-                                    │
-              persist → dedupe → queue → engine → actions → execution record
-                                                                 │
-                                                            Dashboard
-```
-
-A workflow is one sentence:
-
-```
-WHEN   someone comments on a post
-IF     the comment contains "price"
-THEN   reply publicly, and send them a DM
-```
-
 ## Architecture
 
-```
-┌──────────────┐        REST + httpOnly cookie        ┌──────────────┐
-│   Next.js    │ ───────────────────────────────────> │   Express    │
-│  React 19    │ <─────────────────────────────────── │  TypeScript  │
-└──────────────┘                                      └───────┬──────┘
-                                                              │
-                          ┌───────────────────┬───────────────┴───────────┐
-                          ▼                   ▼                           ▼
-                   Authentication      Workflow engine              Instagram
-                    (Argon2id,        (pure evaluation,          (provider iface,
-                  server sessions)     Prisma-only I/O)          real + dev mock)
-                          │                   │                           │
-                          └───────────────────┼───────────────────────────┘
-                                              ▼
-                                    ┌──────────────────┐
-                                    │    PostgreSQL    │
-                                    │      Prisma      │
-                                    └────────┬─────────┘
-                                             │
-                                    ┌──────────────────┐        ┌──────────────┐
-                                    │  Redis / BullMQ  │ <───── │   Webhooks   │
-                                    │     (worker)     │        │     Meta     │
-                                    └──────────────────┘        └──────────────┘
-```
-
-Layering is strict: **route → controller → service → repository → database**.
-Controllers hold no business rules; services make no Meta calls directly; the
-workflow engine imports no React and no Express.
-
-### Repository layout
+Two independent applications. Neither build depends on the other's source tree;
+either can be deployed on its own.
 
 ```
-socialpilot/
-├── apps/
-│   ├── api/                   Express + Prisma
-│   │   ├── prisma/            schema, migrations, seed
-│   │   └── src/
-│   │       ├── config/        env validation, logger, prisma client
-│   │       ├── engine/        workflow engine — pure, no framework
-│   │       ├── http/          error types, response envelope, validation
-│   │       ├── jobs/          BullMQ queue and processors
-│   │       ├── middleware/    auth, workspace scoping, rate limits, errors
-│   │       └── modules/       auth · workspaces · instagram · workflows
-│   │                          dashboard · webhooks · events · audit
-│   └── web/                   Next.js App Router
-│       ├── app/(auth)/        login, signup
-│       ├── app/(app)/         dashboard, workflows, instagram, activity, settings
-│       ├── components/        ui primitives, layout, feature components
-│       └── features/          data hooks per domain
-└── packages/
-    └── contracts/             shared Zod schemas — the single source of truth
+                          USER
+                            │
+                            ▼
+                   ┌─────────────────┐
+                   │    frontend/    │   Next.js · React · Tailwind · shadcn
+                   │  presentation   │
+                   └────────┬────────┘
+                            │  REST over HTTPS, httpOnly session cookie
+                            ▼
+                   ┌─────────────────┐
+                   │    backend/     │   Node · Express · TypeScript
+                   │ all business    │
+                   │     logic       │
+                   └────────┬────────┘
+                            │
+          ┌─────────────────┼──────────────────┐
+          ▼                 ▼                  ▼
+       Prisma        Workflow engine       Instagram
+          │                 │              (Meta Graph)
+          ▼                 │                   │
+   Supabase Postgres        │                   ▼
+                            │              Meta webhooks
+                            ▼
+                     Redis / BullMQ
+                    (optional locally)
 ```
 
-`@socialpilot/contracts` is validated identically on both sides. The client copy
-exists to save a round trip; the server is always the real gate.
+**The frontend never touches** PostgreSQL, Prisma, Meta access tokens, the app
+secret, or the workflow engine. It knows one thing: `NEXT_PUBLIC_API_URL`.
+
+Two rules keep it that way rather than relying on discipline:
+
+- `frontend/eslint.config.mjs` bans imports from `backend/` and `@prisma/*`.
+- `backend/src/config/contract-drift.test.ts` fails the build if the frontend's
+  copy of an enum drifts from the backend's.
+
+```
+instagram-saas/
+├── frontend/          Next.js only
+│   ├── app/           routes: (auth), dashboard, workflows, instagram, activity, settings
+│   ├── components/    ui · layout · dashboard · workflows
+│   ├── features/      data hooks per domain
+│   ├── lib/api/       the entire view of the backend
+│   ├── types/         the frontend's copy of the API contract
+│   └── providers/
+├── backend/           Node + Express + Prisma
+│   ├── prisma/        schema · migrations · seed
+│   └── src/
+│       ├── config/    env validation · logger · prisma client
+│       ├── contracts/ authoritative Zod schemas
+│       ├── engine/    workflow engine — no framework, no Meta types
+│       ├── modules/   auth · workspaces · instagram · workflows · dashboard · webhooks
+│       ├── jobs/      BullMQ queue and processors
+│       └── middleware/
+├── docs/
+└── package.json       orchestration only
+```
 
 ---
 
 ## Requirements
 
 - **Node.js 20.11+** (22 LTS recommended)
-- **Docker** — for Postgres and Redis
-- **npm 10+**
+- **A Supabase account** — free tier is fine
 
-A Meta developer account is *not* required for local development; see
-[Instagram in development](#instagram-in-development).
+**Docker is not required.** There is no local database to run.
 
 ---
 
-## Getting started
+## Setup
 
 ```bash
-git clone <repo> socialpilot && cd socialpilot
+git clone <repo> instagram-saas
+cd instagram-saas
 npm install
 ```
 
-Create `.env` from the template and generate the two secrets:
+`npm install` installs the root tooling and then both applications.
+
+### 1. Create the Supabase database
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Go to **Connect → ORMs → Prisma**.
+3. Copy **both** connection strings. Prisma needs both, for different reasons —
+   this is the step most setups get wrong:
+
+   | | Port | Used by | Why |
+   | --- | --- | --- | --- |
+   | `DATABASE_URL` | 6543 | the running app | The transaction pooler, so multiple instances don't exhaust Postgres connections |
+   | `DIRECT_URL` | 5432 | `prisma migrate` only | PgBouncer doesn't support the prepared statements and advisory locks migrations need |
+
+   Append `?pgbouncer=true&connection_limit=1` to `DATABASE_URL`. Without
+   `pgbouncer=true`, Prisma emits prepared statements the pooler rejects with
+   *"prepared statement s0 already exists"*.
+
+### 2. Configure the backend
 
 ```bash
-cp .env.example .env
+cp backend/.env.example backend/.env
+```
+
+Fill in `DATABASE_URL` and `DIRECT_URL`, then generate the two secrets:
+
+```bash
 node -e "const c=require('crypto');console.log('SESSION_SECRET='+c.randomBytes(32).toString('base64'));console.log('TOKEN_ENCRYPTION_KEY='+c.randomBytes(32).toString('base64'))"
 ```
 
-Paste both into `.env`, then copy it where the API reads it:
+`TOKEN_ENCRYPTION_KEY` must decode to **exactly** 32 bytes — AES-256-GCM takes
+a 256-bit key. Rotating it invalidates every stored Instagram token.
+
+### 3. Configure the frontend
 
 ```bash
-cp .env apps/api/.env
+cp frontend/.env.example frontend/.env.local
 ```
 
-Start Postgres and Redis, migrate, and seed:
+The default (`NEXT_PUBLIC_API_URL=http://localhost:5000`) is correct for local
+development. Everything in this file is public — it is inlined into the browser
+bundle at build time.
+
+### 4. Create the schema
 
 ```bash
-npm run infra:up
-npm run db:migrate
-npm run db:seed
+cd backend
+npx prisma validate
+npx prisma generate
+npx prisma migrate dev --name init
+npx prisma db seed
 ```
 
-Run both apps:
+Or from the root: `npm run db:migrate && npm run db:seed`.
+
+Verify with `npx prisma studio` — you should see 13 tables with seeded rows.
+
+### 5. Run
 
 ```bash
 npm run dev
 ```
 
-- Web — http://localhost:3000
-- API — http://localhost:5000
+| | |
+| --- | --- |
+| Frontend | http://localhost:3000 |
+| Backend | http://localhost:5000 |
+| Health | http://localhost:5000/api/health |
 
 Sign in with the seeded account:
 
@@ -152,155 +175,90 @@ The seed creates a workspace with a connected mock Instagram account, two
 workflows, and thirty days of execution history, so the dashboard renders real
 shapes rather than empty states.
 
-### Background worker
+### Background worker (optional)
 
-With `REDIS_URL` set, webhook events go through BullMQ and need a worker:
+Redis is optional. Without `REDIS_URL` the backend processes webhook events
+in-process — fine locally, refused in production, because in-process work does
+not survive a restart. Use a hosted Redis (Upstash has a free tier); no Docker
+needed. With it configured:
 
 ```bash
 npm run dev:worker
 ```
 
-Without `REDIS_URL` the API processes events in-process instead — fine for local
-work, refused in production, because in-process work does not survive a restart.
-
----
-
-## Environment variables
-
-| Variable | Required | Notes |
-| --- | --- | --- |
-| `NODE_ENV` | — | `development` \| `test` \| `production` |
-| `FRONTEND_URL` | yes | Exact CORS origin. Must be https in production. |
-| `BACKEND_URL` | yes | `META_REDIRECT_URI` must start with this. |
-| `DATABASE_URL` | yes | Postgres connection string |
-| `REDIS_URL` | in production | Omit locally to process inline |
-| `SESSION_SECRET` | yes | ≥32 bytes, base64 |
-| `TOKEN_ENCRYPTION_KEY` | yes | **exactly** 32 bytes, base64 (AES-256-GCM) |
-| `META_APP_ID` | in production | Instagram App ID, not the Facebook one |
-| `META_APP_SECRET` | in production | Server-only, never reaches the browser |
-| `META_REDIRECT_URI` | in production | Must match the App Dashboard exactly |
-| `META_WEBHOOK_VERIFY_TOKEN` | in production | Any string you choose |
-| `META_GRAPH_VERSION` | — | Pinned, default `v23.0` |
-| `USE_MOCK_INSTAGRAM` | — | Forced `false` in production |
-| `TRUST_PROXY` | — | Proxy hop count; `1` behind one load balancer |
-| `NEXT_PUBLIC_API_URL` | yes | Inlined at **build** time, not read at runtime |
-
-The API validates all of this at startup and refuses to boot with a readable
-report rather than failing later on the first request that needs a value.
-
-Rotating `TOKEN_ENCRYPTION_KEY` invalidates every stored token; all accounts
-must reconnect.
-
 ---
 
 ## Commands
 
+All runnable from the root.
+
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | API and web together |
+| `npm run dev` | Both apps, colour-prefixed |
+| `npm run dev:backend` / `dev:frontend` | One at a time |
 | `npm run dev:worker` | Background worker |
-| `npm run build` | Build contracts, API, and web |
-| `npm run typecheck` | TypeScript across all workspaces |
-| `npm run lint` | ESLint across all workspaces |
-| `npm test` | Unit tests |
-| `npm run test:e2e` | Playwright end-to-end |
+| `npm run build` | Build both |
+| `npm run typecheck` | Both |
+| `npm run lint` | Both |
+| `npm test` | Backend unit tests |
+| `npm run test:integration` | Needs a database |
+| `npm run test:e2e` | Playwright, needs both apps running |
+| `npm run db:validate` | Check schema.prisma |
 | `npm run db:migrate` | Create and apply a migration |
 | `npm run db:deploy` | Apply migrations (production) |
 | `npm run db:seed` | Seed development data |
-| `npm run db:reset` | Drop, re-migrate, re-seed |
 | `npm run db:studio` | Prisma Studio |
-| `npm run infra:up` / `infra:down` | Postgres + Redis |
 
 ---
 
-## Instagram in development
+## How it fits together
 
-`USE_MOCK_INSTAGRAM=true` (the default) serves a local stand-in for Meta, so the
-whole product — OAuth, webhooks, workflow execution — works with no Meta
-account, no App Review, and no public HTTPS callback.
+**Frontend → backend.** Components never call `fetch`. They call
+`api.dashboard.getOverview()` from `frontend/lib/api/`, which is the only place
+an endpoint path or response shape is written down.
 
-The mock serves its own clearly-labelled consent screen and redirects into the
-**real** callback, so state verification, code exchange, token encryption, the
-account upsert, and audit logging all run exactly as in production. Only the far
-end is simulated, and actions are logged instead of sent.
+**Authentication.** Signup and login set an `httpOnly`, `SameSite=Lax` session
+cookie. JavaScript cannot read it, so an XSS bug cannot exfiltrate a session.
+Nothing is stored in `localStorage`. Sessions live server-side and are
+revocable — changing a password ends every other session immediately, which a
+stateless JWT cannot do.
 
-Two independent guards prevent it reaching production: `env.ts` refuses to boot
-with it enabled when `NODE_ENV=production`, and `getProvider()` throws if the
-mock is ever constructed there.
+**Workspace scoping.** Every workspace-scoped request resolves a workspace from
+a header, query, cookie, or session — and validates *every one of those* against
+membership before use. A claim that doesn't hold up falls through to the user's
+default rather than erroring.
 
-To exercise the full pipeline, post a webhook yourself:
+**Instagram OAuth.** Entirely server-side. The frontend asks for an authorize
+URL and navigates there; only the backend can mint the CSRF `state` and holds
+the app secret. Tokens are encrypted with AES-256-GCM before storage and are
+excluded from every response by construction.
 
-```bash
-curl -X POST http://localhost:5000/api/webhooks/instagram -H 'Content-Type: application/json' -d '{"object":"instagram","entry":[{"id":"mock_seed_account","time":1754000000,"changes":[{"field":"comments","value":{"id":"c_1","text":"what is the price?","from":{"id":"u1","username":"curious_buyer"},"media":{"id":"p1"}}}]}]}'
-```
+**Webhooks.** `POST /api/webhooks/instagram` verifies an HMAC-SHA256 signature
+over the raw bytes, answers 200 immediately, then persists and enqueues. Meta
+treats a slow response as a failed delivery. Idempotency is a unique constraint
+on a deterministic event id, not a read-then-write check.
 
-Post it twice — the second is deduplicated.
-
-Real Meta setup, permissions, App Review, and the production checklist are in
-**[docs/meta-instagram.md](docs/meta-instagram.md)**.
-
----
-
-## Security
-
-- **Passwords** — Argon2id at OWASP's baseline (19 MiB, t=2, p=1), parameters
-  stated explicitly so a dependency's changing defaults cannot silently alter
-  the cost of every hash ever written.
-- **Sessions** — server-side and revocable, stored as SHA-256 hashes so a
-  database leak yields no usable cookies. `httpOnly`, so XSS cannot exfiltrate
-  one. Changing a password revokes every other session.
-- **Login** — Argon2 runs on a decoy hash when the email does not exist, so
-  response time does not reveal which emails are registered.
-- **Access tokens** — AES-256-GCM at rest with a fresh IV per encryption and an
-  authenticated tag. One module decrypts; no response schema can carry
-  ciphertext.
-- **Multi-tenancy** — `workspaceId` is a required positional argument on every
-  workflow repository method, so a query that is not tenant-scoped cannot be
-  expressed. A workspace the caller cannot see returns 404, not 403, so list
-  endpoints are not enumeration oracles.
-- **OAuth** — `state` is 256 bits, stored server-side, and consumed atomically
-  (`updateMany` with `consumedAt: null` in the predicate), so a replay cannot
-  win a race. Post-OAuth redirects are allowlisted against the frontend origin.
-- **Webhooks** — HMAC-SHA256 over the raw bytes; verify tokens and signatures
-  compared in constant time.
-- **Logging** — redaction is configured centrally, because the dangerous case is
-  the error object nobody thought about.
+**Workflow engine.** Entirely backend. The frontend configures workflows; the
+backend runs them.
 
 ---
 
 ## Testing
 
 ```bash
-npm test          # unit
-npm run test:e2e  # end-to-end
+npm run typecheck && npm run lint && npm test && npm run build
 ```
 
 Unit tests cover condition evaluation, variable interpolation, event
-normalization, token encryption, and Prisma/Zod enum parity.
+normalization, token encryption, Prisma↔Zod enum parity, and backend↔frontend
+contract drift.
 
-Two are worth singling out:
-
-- The interpolation suite caught a live defect where `{{constructor}}` in a
-  workflow message resolved through the prototype chain to
-  `function Object() { [native code] }` and would have been posted verbatim as a
-  public Instagram reply.
-- The parity suite fails the build if an enum member is added to
-  `schema.prisma` or the Zod contracts but not the other — otherwise the
-  mismatch surfaces much later as a value the database accepts and the API
-  rejects.
-
----
-
-## Production
+Integration and E2E need a database:
 
 ```bash
-docker compose up --build
+npm run test:integration   # auth, tenant isolation, webhook→execution
+npm run test:e2e           # the full journey in a browser
 ```
-
-Runs Postgres, Redis, migrations (as a one-shot service, so replicas do not race
-to migrate), the API, a worker, and the web app.
-
-Full deployment notes are in **[docs/deployment.md](docs/deployment.md)**.
 
 ---
 
@@ -318,9 +276,22 @@ Full deployment notes are in **[docs/deployment.md](docs/deployment.md)**.
 
 ---
 
-## Scope
+## Troubleshooting
 
-V1 is **Instagram only**, deliberately. The provider interface is narrow with
-one real implementation plus a dev mock — sized for a second platform later,
-rather than built for six now. Every table is already platform-keyed, so adding
-one is an enum member and a provider, not a migration across the schema.
+**Backend exits with code 78** — configuration. The report names each bad
+variable. Nothing else is wrong.
+
+**`prepared statement "s0" already exists`** — `DATABASE_URL` is the pooled
+connection without `?pgbouncer=true`.
+
+**Migrations hang or fail on advisory locks** — `prisma migrate` is running
+against the pooled URL. It needs `DIRECT_URL` (port 5432).
+
+**CORS errors in the browser** — `FRONTEND_URL` in `backend/.env` must be the
+exact origin, scheme and port included. The backend allows one origin
+deliberately: a reflected origin with credentials would let any site drive the
+API with a user's session.
+
+**Frontend says "Could not reach the server"** — the backend isn't running, or
+`NEXT_PUBLIC_API_URL` points somewhere else. Note that changing it requires a
+rebuild, not a restart.

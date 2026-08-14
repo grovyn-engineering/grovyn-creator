@@ -1,38 +1,44 @@
 {
-  "name": "socialpilot",
+  "name": "instagram-saas",
   "version": "0.1.0",
   "private": true,
-  "description": "Instagram automation platform — workspaces, workflows, and a webhook-driven execution engine.",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "description": "Instagram automation SaaS. Two independent applications: a Next.js frontend and a Node/Express backend, talking over REST.",
   "engines": {
     "node": ">=20.11.0"
   },
   "scripts": {
-    "dev": "npm-run-all --parallel dev:api dev:web",
-    "dev:api": "npm run dev --workspace @socialpilot/api",
-    "dev:web": "npm run dev --workspace @socialpilot/web",
-    "dev:worker": "npm run dev:worker --workspace @socialpilot/api",
-    "build": "npm run build --workspace @socialpilot/contracts && npm run build --workspace @socialpilot/api && npm run build --workspace @socialpilot/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "test:e2e": "npm run test:e2e --workspace @socialpilot/web",
-    "db:generate": "npm run db:generate --workspace @socialpilot/api",
-    "db:migrate": "npm run db:migrate --workspace @socialpilot/api",
-    "db:deploy": "npm run db:deploy --workspace @socialpilot/api",
-    "db:seed": "npm run db:seed --workspace @socialpilot/api",
-    "db:reset": "npm run db:reset --workspace @socialpilot/api",
-    "db:studio": "npm run db:studio --workspace @socialpilot/api",
-    "infra:up": "docker compose -f docker-compose.dev.yml up -d",
-    "infra:down": "docker compose -f docker-compose.dev.yml down",
-    "infra:logs": "docker compose -f docker-compose.dev.yml logs -f"
+    "//": "This root package intentionally declares no workspaces. frontend/ and backend/ each own their dependencies and can be installed, built, and deployed on their own; these scripts are a convenience for running both locally, not a coupling.",
+
+    "//install": "`cd`, not `npm --prefix`. With --prefix, npm still resolves lifecycle scripts against the ROOT package.json, so this postinstall re-fires and recurses until the process dies. `cd` changes the working directory for real, so each child npm reads its own manifest — which has no postinstall.",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "postinstall": "npm run install:all",
+
+    "dev": "concurrently --names \"backend,frontend\" --prefix-colors \"blue,magenta\" --kill-others-on-fail \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:worker": "npm run dev:worker --prefix backend",
+
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+
+    "start": "concurrently --names \"backend,frontend\" \"npm run start --prefix backend\" \"npm run start --prefix frontend\"",
+
+    "typecheck": "npm run typecheck --prefix backend && npm run typecheck --prefix frontend",
+    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend",
+
+    "test": "npm run test --prefix backend",
+    "test:integration": "npm run test:integration --prefix backend",
+    "test:e2e": "npm run test:e2e --prefix frontend",
+
+    "db:generate": "npm run db:generate --prefix backend",
+    "db:migrate": "npm run db:migrate --prefix backend",
+    "db:deploy": "npm run db:deploy --prefix backend",
+    "db:seed": "npm run db:seed --prefix backend",
+    "db:studio": "npm run db:studio --prefix backend",
+    "db:validate": "npm run db:validate --prefix backend"
   },
   "devDependencies": {
-    "npm-run-all2": "^8.0.4",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.3"
+    "concurrently": "^9.2.1"
   }
 }

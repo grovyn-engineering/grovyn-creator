@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL via Prisma. Schema: `apps/api/prisma/schema.prisma`.
+PostgreSQL via Prisma. Schema: `backend/prisma/schema.prisma`.
 
 ## Model map
 
@@ -100,7 +100,7 @@ to a defect found in the audited prior system, where a dashboard query used
 
 ## Enums
 
-Declared twice — in `schema.prisma` and in `packages/contracts/src/enums.ts`.
+Declared twice — in `schema.prisma` and in `backend/src/contracts/enums.ts`.
 Prisma cannot import Zod, and the browser cannot import Prisma, so the
 duplication is unavoidable. The drift is not: `enum-parity.test.ts` compares all
 twelve and fails the build on a mismatch.
@@ -127,7 +127,12 @@ npm run db:deploy     # production: apply only
 npm run db:reset      # drop, re-migrate, re-seed
 ```
 
-In production, migrations run as a one-shot compose service rather than in the
+`migrate` needs `DIRECT_URL` — Supabase's pooled connection (port 6543) cannot
+run migrations, because PgBouncer in transaction mode supports neither the
+prepared statements nor the advisory locks Prisma uses. Pointing both variables
+at the pooled URL fails with an error that never mentions pooling.
+
+In production, run `db:deploy` as its own deployment step rather than from the
 API's entrypoint — with several replicas, an entrypoint migration means every
 replica racing to migrate the same database on every deploy.
 
@@ -137,6 +142,7 @@ replica racing to migrate the same database on every deploy.
 connection, two workflows, and thirty days of execution history with realistic
 volume variation and a low non-zero failure rate.
 
-It is idempotent, and it refuses to run against a non-local `DATABASE_URL` or
-with `NODE_ENV=production` — fabricated executions in a real workspace would
-corrupt the one thing this product is supposed to be trustworthy about.
+It is idempotent, and it refuses to run with `NODE_ENV=production` — fabricated
+executions in a real workspace would corrupt the one thing this product is
+supposed to be trustworthy about. It prints the target host before writing, so
+an accidental production URL is visible rather than silent.
