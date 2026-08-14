@@ -197,6 +197,22 @@ function load(): Env {
 
 export const env: Env = load();
 
+/**
+ * `NEXT_PUBLIC_*` variables found in the backend's environment.
+ *
+ * These belong to the frontend and are *published* — Next inlines them into the
+ * browser bundle at build time. One appearing here means the two `.env` files
+ * have been merged or copied from each other, which is how a backend secret
+ * eventually ends up in a frontend file and then in a public JavaScript bundle.
+ *
+ * Reported rather than fatal: the variable itself is harmless, and a shared
+ * shell can legitimately have one exported. It is the *direction of drift* that
+ * matters, so the server names it at startup instead of failing.
+ */
+export function misplacedFrontendVars(): string[] {
+  return Object.keys(process.env).filter((key) => key.startsWith("NEXT_PUBLIC_"));
+}
+
 export const isProduction = env.NODE_ENV === "production";
 export const isTest = env.NODE_ENV === "test";
 export const isDevelopment = env.NODE_ENV === "development";

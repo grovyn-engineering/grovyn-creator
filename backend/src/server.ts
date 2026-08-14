@@ -13,7 +13,7 @@
 import { EnvironmentError } from "./config/environment-error.js";
 
 async function main(): Promise<void> {
-  const { env, hasQueue, isProduction } = await import("./config/env.js");
+  const { env, hasQueue, isProduction, misplacedFrontendVars } = await import("./config/env.js");
   const { logger } = await import("./config/logger.js");
   const { createApp } = await import("./app.js");
   const { prisma, disconnectPrisma } = await import("./config/prisma.js");
@@ -42,6 +42,14 @@ async function main(): Promise<void> {
     if (!hasQueue) {
       logger.warn(
         "REDIS_URL is not set — webhook events are processed in-process and will not survive a restart."
+      );
+    }
+
+    const misplaced = misplacedFrontendVars();
+    if (misplaced.length > 0) {
+      logger.warn(
+        { variables: misplaced },
+        "NEXT_PUBLIC_* variables are set in the backend environment. Those belong in frontend/.env.local — the two files should share nothing."
       );
     }
   });
