@@ -1,0 +1,15 @@
+{
+  // The main config excludes test files so `npm run build` does not compile
+  // them into dist. They still need typechecking — an integration test that
+  // does not compile is one nobody notices is broken until it is needed.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The base config sets rootDir to src/ so dist/ stays flat. This config
+    // emits nothing and covers files outside src/, so rootDir has to widen.
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "vitest.config.ts", "vitest.integration.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}
