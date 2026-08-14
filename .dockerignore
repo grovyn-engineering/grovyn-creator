@@ -1,0 +1,39 @@
+# Keeping these out of the build context matters for more than speed: node_modules
+# from the host is the wrong platform's binaries, and .env would bake real
+# secrets into an image layer where they survive even if a later layer deletes them.
+
+node_modules
+**/node_modules
+
+.next
+**/.next
+dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+.github
+
+coverage
+test-results
+playwright-report
+blob-report
+
+*.log
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+docker-compose*.yml
+Dockerfile
+**/Dockerfile
+README.md
+docs

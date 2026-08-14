@@ -1,0 +1,145 @@
+# Production-shaped stack: both apps containerised, plus Postgres and Redis.
+#
+# For day-to-day development use docker-compose.dev.yml instead — it runs only
+# the infrastructure and leaves the apps on the host, where hot reload works.
+#
+#   cp .env.example .env    # then fill in the secrets
+#   docker compose up --build
+#
+# Every secret comes from the environment. Nothing is defaulted to a real value,
+# so a missing variable fails the API's startup validation with a readable
+# message rather than booting with a placeholder key.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-socialpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-socialpilot}
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-socialpilot} -d ${POSTGRES_DB:-socialpilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    # No published port. The database is reachable only on the compose network;
+    # exposing 5432 to the host is a development convenience, not a production one.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # noeviction is required by BullMQ — under memory pressure an evicting Redis
+    # silently drops job hashes, which loses queued work with no error.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Migrations run as their own one-shot service rather than in the API's
+  # entrypoint. With several API replicas, an entrypoint migration means every
+  # replica racing to migrate the same database on every deploy.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-socialpilot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-socialpilot}
+    command: ["npx", "prisma", "migrate", "deploy", "--schema", "apps/api/prisma/schema.prisma"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+      BACKEND_URL: ${BACKEND_URL:?BACKEND_URL is required}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-socialpilot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-socialpilot}
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
+      META_APP_ID: ${META_APP_ID}
+      META_APP_SECRET: ${META_APP_SECRET}
+      META_REDIRECT_URI: ${META_REDIRECT_URI}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v23.0}
+      USE_MOCK_INSTAGRAM: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Behind the reverse proxy that terminates TLS. Counting hops explicitly
+      # rather than trusting any X-Forwarded-For a client chooses to send.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+    ports:
+      - "${API_PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # The worker shares the API image and differs only in its command. Separate
+  # from the API so a burst of webhook processing cannot starve HTTP requests of
+  # event-loop time, and so the two scale independently.
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-socialpilot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-socialpilot}
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_URL: ${BACKEND_URL}
+      META_APP_ID: ${META_APP_ID}
+      META_APP_SECRET: ${META_APP_SECRET}
+      META_REDIRECT_URI: ${META_REDIRECT_URI}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v23.0}
+      USE_MOCK_INSTAGRAM: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: ["node", "apps/api/dist/worker.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Inlined into the client bundle at build time, so this is a build
+        # argument rather than a runtime variable — changing it requires a
+        # rebuild, not a restart.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  redis-data:

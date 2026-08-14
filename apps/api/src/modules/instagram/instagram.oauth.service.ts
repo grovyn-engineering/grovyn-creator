@@ -114,6 +114,28 @@ export async function handleCallback(query: InstagramCallbackQuery): Promise<Cal
       tokenExpiresAt: connected.expiresAt,
     });
 
+    /*
+     * Subscribe the account to webhook fields.
+     *
+     * App-level webhook config is not enough — Meta only delivers for an
+     * account once the app is subscribed on that account. Skipping this
+     * produces a connection that looks perfectly healthy and never receives an
+     * event, which is close to undiagnosable from the UI.
+     *
+     * Deliberately not fatal: the account is already stored and usable for
+     * everything except inbound events, and failing the whole connection here
+     * would send the user back to the start for a problem a retry can fix.
+     * The failure is logged, and the Activity page's silence is the symptom.
+     */
+    try {
+      await getProvider().subscribeToWebhooks({ accessToken: connected.accessToken });
+    } catch (error) {
+      logger.error(
+        { err: error, workspaceId: pending.workspaceId, accountId: account.id },
+        "connected the account but could not subscribe it to webhooks — no events will arrive until this succeeds"
+      );
+    }
+
     void audit.record({
       action: "INSTAGRAM_CONNECTED",
       entityType: "INSTAGRAM_ACCOUNT",

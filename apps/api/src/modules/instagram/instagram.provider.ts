@@ -56,6 +56,16 @@ export interface SocialProvider {
   }): Promise<{ id: string }>;
 
   likeComment(input: { accessToken: string; commentId: string }): Promise<void>;
+
+  /**
+   * Subscribes the connected account to webhook fields.
+   *
+   * App-level webhook configuration is not sufficient — Meta only delivers for
+   * an account once the app is subscribed *on that account*. Without this call
+   * a connection looks entirely healthy and no event ever arrives, which is
+   * close to undiagnosable from the UI.
+   */
+  subscribeToWebhooks(input: { accessToken: string }): Promise<void>;
 }
 
 export interface ConnectedAccount {
@@ -224,6 +234,18 @@ export class InstagramProvider implements SocialProvider {
       form: { hide: "false", access_token: accessToken },
     });
   }
+
+  async subscribeToWebhooks({ accessToken }: { accessToken: string }) {
+    await metaRequest(`/${this.config.graphVersion}/me/subscribed_apps`, {
+      method: "POST",
+      form: {
+        // Must match the fields subscribed at the app level in the App
+        // Dashboard; a field subscribed here but not there is not delivered.
+        subscribed_fields: "comments,messages,mentions",
+        access_token: accessToken,
+      },
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -330,6 +352,10 @@ export class MockInstagramProvider implements SocialProvider {
 
   async likeComment(input: { commentId: string }) {
     this.sent.push({ kind: "like", payload: input });
+  }
+
+  async subscribeToWebhooks() {
+    logger.info("[mock] subscribed account to webhook fields");
   }
 
   /** Test helper. Not part of `SocialProvider`. */
