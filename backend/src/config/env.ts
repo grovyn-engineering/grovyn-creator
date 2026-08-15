@@ -1,5 +1,24 @@
+import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 import { EnvironmentError } from "./environment-error.js";
+
+/**
+ * Load `.env` before anything reads `process.env`.
+ *
+ * This has to happen here rather than in the entry point, because this module
+ * validates at import time and is imported by everything — the server, the
+ * worker, the seed script, and Vitest. Putting it in `server.ts` would leave
+ * every other entry point without configuration.
+ *
+ * `dotenv` does not overwrite variables that are already set, which is the
+ * behaviour we want: a real environment variable from the shell, a container,
+ * or a hosting platform always wins over the file. In production there is
+ * usually no `.env` at all and this call is a no-op.
+ *
+ * Note that Prisma's CLI loads `.env` on its own — which is why migrations
+ * worked before this existed and the server did not.
+ */
+loadDotenv({ quiet: true });
 
 /**
  * Environment validation runs once, at import time, before the server binds a
@@ -30,6 +49,25 @@ const urlSchema = z
   // A trailing slash here becomes a double slash in every URL built from it.
   .transform((v) => v.replace(/\/+$/, ""));
 
+/**
+ * An optional variable that may be present but blank.
+ *
+ * `.env` files are written by hand, and leaving a key with no value —
+ * `REDIS_URL=` — is the normal way to say "not configured". Without this,
+ * `z.string().min(1).optional()` sees a present-but-empty string, skips the
+ * optional branch, and fails the length check: the server then refuses to boot
+ * over a variable that is genuinely optional.
+ *
+ * Blank and whitespace-only both collapse to undefined, so the cross-field
+ * checks below can test these with a plain truthiness check.
+ */
+function optional<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    schema.optional()
+  );
+}
+
 const rawEnvSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -46,14 +84,14 @@ const rawEnvSchema = z
      * it from the same .env, so it is declared here to keep the file's contract
      * in one place.
      */
-    DIRECT_URL: z.string().min(1).optional(),
+    DIRECT_URL: optional(z.string().min(1)),
 
     /**
      * Optional. Without it the API processes webhook events inline instead of
      * through BullMQ — acceptable for local development, refused in production
      * by the cross-field check below.
      */
-    REDIS_URL: z.string().min(1).optional(),
+    REDIS_URL: optional(z.string().min(1)),
 
     SESSION_SECRET: z
       .string()
@@ -69,10 +107,10 @@ const rawEnvSchema = z
         message: "must be exactly 32 bytes of base64 — AES-256-GCM takes a 256-bit key",
       }),
 
-    META_APP_ID: z.string().min(1).optional(),
-    META_APP_SECRET: z.string().min(1).optional(),
-    META_REDIRECT_URI: z.string().url().optional(),
-    META_WEBHOOK_VERIFY_TOKEN: z.string().min(1).optional(),
+    META_APP_ID: optional(z.string().min(1)),
+    META_APP_SECRET: optional(z.string().min(1)),
+    META_REDIRECT_URI: optional(z.string().url()),
+    META_WEBHOOK_VERIFY_TOKEN: optional(z.string().min(1)),
     /**
      * Pinned rather than floating. Meta's Graph API is versioned and each
      * version has a published deprecation date; silently following "latest"

@@ -17,6 +17,7 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { hash } from "@node-rs/argon2";
 import { randomUUID } from "node:crypto";
+import { encryptToken } from "../src/utils/crypto.js";
 
 const prisma = new PrismaClient();
 
@@ -85,16 +86,36 @@ async function main(): Promise<void> {
   // the mock provider never sends it anywhere.
   const account = await prisma.instagramAccount.upsert({
     where: { instagramUserId: "mock_seed_account" },
-    update: { workspaceId: workspace.id, status: "ACTIVE" },
+    // The token is refreshed on update too, not just on create. Leaving it out
+    // meant re-seeding kept whatever was already stored — so an account left
+    // EXPIRED by a failed decrypt stayed broken no matter how many times the
+    // seed was re-run.
+    update: {
+      workspaceId: workspace.id,
+      status: "ACTIVE",
+      accessTokenEncrypted: encryptToken("mock-seed-access-token"),
+      tokenExpiresAt: new Date(Date.now() + 60 * 86_400_000),
+    },
     create: {
       workspaceId: workspace.id,
       instagramUserId: "mock_seed_account",
       username: "demo_studio",
       displayName: "Demo Studio",
       status: "ACTIVE",
-      // Deliberately not a valid ciphertext: any code path that tried to use it
-      // would fail loudly rather than silently pretending to work.
-      accessTokenEncrypted: "seed-placeholder-not-a-real-token",
+      /*
+       * A fake token, but genuinely encrypted with the real routine.
+       *
+       * An earlier version stored a plain placeholder string, on the theory
+       * that anything trying to use it should fail loudly. It did fail loudly —
+       * `getAccessTokenFor` could not decrypt it, marked the account EXPIRED,
+       * and every seeded workflow then refused to run. That defeats the point
+       * of the mock provider, which exists so the whole pipeline works without
+       * Meta credentials.
+       *
+       * The value is still meaningless: the mock provider never sends it
+       * anywhere, and the real provider would be rejected by Meta immediately.
+       */
+      accessTokenEncrypted: encryptToken("mock-seed-access-token"),
       tokenExpiresAt: new Date(Date.now() + 60 * 86_400_000),
     },
   });
