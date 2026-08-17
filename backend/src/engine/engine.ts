@@ -7,6 +7,7 @@ import * as audit from "../modules/audit/audit.service.js";
 import { executeAction, type ActionContext } from "./actions.js";
 import { evaluateConditions } from "./conditions.js";
 import { buildVariables } from "./variables.js";
+import { appendWebhookDebugLog } from "../utils/file-logger.js";
 
 /**
  * The workflow engine.
@@ -73,6 +74,9 @@ export async function runEvent(
   });
 
   result.candidates = workflows.length;
+  appendWebhookDebugLog(
+    `WORKFLOW ENGINE SEARCH: Found ${workflows.length} active workflow candidate(s) for trigger "${triggerType}" in workspace "${workspaceId}"`
+  );
   if (workflows.length === 0) return result;
 
   const variables = buildVariables(event);
@@ -80,10 +84,13 @@ export async function runEvent(
   for (const workflow of workflows) {
     const evaluation = evaluateConditions(workflow.conditions, variables);
 
-    // A non-matching workflow still gets an execution row, with SKIPPED and the
-    // reason. Recording only the runs that fired would leave a user asking "why
-    // didn't my workflow do anything?" with nothing to look at — which is the
-    // single most common support question this kind of product generates.
+    appendWebhookDebugLog(
+      `WORKFLOW EVALUATION: Workflow "${workflow.name}" (ID: ${workflow.id})\n` +
+      `Matched: ${evaluation.matched}\n` +
+      `Skip Reason: ${evaluation.reason ?? "N/A (Conditions passed)"}\n` +
+      `Variables: ${JSON.stringify(variables, null, 2)}`
+    );
+
     const execution = await createExecution({
       workflowId: workflow.id,
       workspaceId,
@@ -203,6 +210,13 @@ async function runActions(input: {
         context
       );
 
+      appendWebhookDebugLog(
+        `ACTION EXECUTION OUTCOME [${action.actionType}]:\n` +
+        `Status: ${outcome.skipped ? "SKIPPED" : "SUCCESS"}\n` +
+        `External ID: ${outcome.externalId ?? "N/A"}\n` +
+        `Skip Reason: ${outcome.skipReason ?? "N/A"}`
+      );
+
       await prisma.workflowExecutionAction.update({
         where: { id: row.id },
         data: {
@@ -216,6 +230,12 @@ async function runActions(input: {
       anyFailed = true;
       const message = toUserMessage(error);
       firstError ??= message;
+
+      appendWebhookDebugLog(
+        `ACTION EXECUTION FAILED [${action.actionType}]:\n` +
+        `User-Facing Error: ${message}\n` +
+        `Raw Error: ${String(error)}`
+      );
 
       await prisma.workflowExecutionAction.update({
         where: { id: row.id },

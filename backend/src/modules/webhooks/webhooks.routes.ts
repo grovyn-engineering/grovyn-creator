@@ -14,3 +14,7 @@ export const webhooksRouter: Router = Router();
 
 webhooksRouter.get("/instagram", controller.verify);
 webhooksRouter.post("/instagram", controller.receive);
+webhooksRouter.get("/privacy", controller.privacy);
+webhooksRouter.get("/data-deletion", controller.dataDeletion);
+
+

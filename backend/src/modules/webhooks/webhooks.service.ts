@@ -9,6 +9,7 @@ import { normalizeWebhookBody } from "../../engine/normalizer.js";
 import { enqueueWebhookEvent } from "../../jobs/queue.js";
 import * as instagramRepo from "../instagram/instagram.repository.js";
 import type { WebhookBody } from "../instagram/instagram.types.js";
+import { appendWebhookDebugLog } from "../../utils/file-logger.js";
 
 /**
  * Webhook ingestion.
@@ -147,11 +148,18 @@ async function route(
 ): Promise<{ workspaceId: string; accountId: string } | null> {
   const account = await instagramRepo.findAccountByInstagramUserId(event.recipientAccountId);
   if (!account) {
+    appendWebhookDebugLog(
+      `ACCOUNT ROUTING WARNING: Received event for recipientAccountId="${event.recipientAccountId}", but NO account matching this ID exists in SocialPilot database.`
+    );
     logger.warn(
       { recipientAccountId: event.recipientAccountId },
       "webhook event for an unknown Instagram account"
     );
     return null;
   }
+  appendWebhookDebugLog(
+    `ACCOUNT ROUTING MATCHED: recipientAccountId="${event.recipientAccountId}" → Instagram Account @${account.username} (workspaceId: ${account.workspaceId})`
+  );
   return { workspaceId: account.workspaceId, accountId: account.id };
 }
+

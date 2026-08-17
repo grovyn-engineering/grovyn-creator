@@ -64,10 +64,10 @@ export function findAccountById(
 export function findAccountByInstagramUserId(
   instagramUserId: string,
   db: Db = prisma
-): Promise<{ id: string; workspaceId: string; status: string } | null> {
+): Promise<{ id: string; workspaceId: string; status: string; username: string } | null> {
   return db.instagramAccount.findUnique({
     where: { instagramUserId },
-    select: { id: true, workspaceId: true, status: true },
+    select: { id: true, workspaceId: true, status: true, username: true },
   });
 }
 

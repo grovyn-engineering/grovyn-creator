@@ -38,6 +38,38 @@ apiRouter.use("/instagram", instagramRouter);
 apiRouter.use("/workflows", workflowsRouter);
 apiRouter.use("/events", eventsRouter);
 
+// Public — Privacy Policy and Data Deletion HTML pages for Meta App requirement
+apiRouter.get("/privacy", (_req, res) => {
+  res.type("text/html").send(`<!DOCTYPE html>
+<html>
+<head><title>SocialPilot Privacy Policy</title></head>
+<body style="font-family: sans-serif; padding: 40px; line-height: 1.6; max-width: 800px; margin: 0 auto;">
+  <h1>SocialPilot Privacy Policy</h1>
+  <p>SocialPilot respects your privacy and is committed to protecting your personal data.</p>
+  <p>We only use your Instagram permissions to automate direct messages and manage comments as configured in your workflows.</p>
+  <p>We do not sell, rent, or share your personal data with any third parties.</p>
+  <p>For questions or support, contact support@socialpilot.app</p>
+</body>
+</html>`);
+});
+
+apiRouter.get("/data-deletion", (_req, res) => {
+  res.type("text/html").send(`<!DOCTYPE html>
+<html>
+<head><title>SocialPilot Data Deletion Instructions</title></head>
+<body style="font-family: sans-serif; padding: 40px; line-height: 1.6; max-width: 800px; margin: 0 auto;">
+  <h1>SocialPilot User Data Deletion Instructions</h1>
+  <p>To request deletion of your account and data from SocialPilot:</p>
+  <ol>
+    <li>Log into SocialPilot Dashboard and disconnect your Instagram account under Accounts page.</li>
+    <li>Remove the SocialPilot application under Instagram Apps & Websites settings.</li>
+    <li>You can also request full data erasure by contacting support@socialpilot.app</li>
+  </ol>
+</body>
+</html>`);
+});
+
 // Public — Meta cannot present a session. Authenticity is the verify token on
 // GET and the HMAC signature on POST.
 apiRouter.use("/webhooks", webhooksRouter);
+
