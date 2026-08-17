@@ -278,6 +278,20 @@ npm run test:e2e           # the full journey in a browser
 
 ## Troubleshooting
 
+**`npm run dev` fails immediately with exit code 1, or 4294967295 on Windows** —
+a previous run's servers are still holding ports 3000/5000. It happens whenever
+`npm run dev` is stopped in a way that doesn't let it clean up: a closed
+terminal, a hard stop from an editor, a crash. Because the root script uses
+`--kill-others-on-fail`, one stuck port takes both apps down, and the exit codes
+say nothing useful.
+
+```bash
+npm run ports:free
+```
+
+Then `npm run dev` again. If the error mentions `EADDRINUSE` you have the same
+problem under a clearer name.
+
 **Backend exits with code 78** — configuration. The report names each bad
 variable. Nothing else is wrong.
 
