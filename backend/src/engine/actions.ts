@@ -94,21 +94,48 @@ async function replyToComment(
   return { externalId: reply.id };
 }
 
+/**
+ * Sends a DM, choosing the addressing mode from the event that triggered it.
+ *
+ * This split is the difference between the product working and not working.
+ * Meta's 24-hour messaging window means a normal DM only reaches someone who
+ * messaged the account within the last day — which a person who just left a
+ * comment almost never has. Sending "comment PRICE and I'll DM you" through
+ * the normal endpoint fails on essentially every real comment.
+ *
+ * Meta's answer is the private reply: addressed by comment id, valid for 7
+ * days after the comment, and allowed exactly once per comment. So a comment
+ * trigger takes that path, and a message trigger — where the window is open by
+ * definition, because they just messaged — takes the normal one.
+ */
 async function sendDirectMessage(
   rawConfig: unknown,
   context: ActionContext
 ): Promise<ActionOutcome> {
   const config = sendDirectMessageConfigSchema.parse(rawConfig);
 
-  const recipientId = recipientFor(context.event);
-  if (!recipientId) {
-    // Instagram omits the author id on some comment webhooks. Without it there
-    // is nobody to message, and that is a legitimate skip rather than an error.
-    return { skipped: true, skipReason: "This event does not identify who to message." };
-  }
-
   const { text } = interpolate(config.message, context.variables);
   if (!text) return { skipped: true, skipReason: "The message would have been empty." };
+
+  const event = context.event.payload;
+
+  if (event.type === "COMMENT" || event.type === "MENTION") {
+    const commentId = event.type === "COMMENT" ? event.commentId : event.mentionId;
+
+    const simulated = dryRun(context, `privately reply “${text}” to the commenter`);
+    if (simulated) return simulated;
+
+    const accessToken = await getAccessTokenFor(context.instagramAccountId);
+    const reply = await getProvider().sendPrivateReply({ accessToken, commentId, message: text });
+    return { externalId: reply.id };
+  }
+
+  const recipientId = recipientFor(context.event);
+  if (!recipientId) {
+    // Instagram omits the sender id on some payloads. Without it there is
+    // nobody to message, and that is a legitimate skip rather than an error.
+    return { skipped: true, skipReason: "This event does not identify who to message." };
+  }
 
   const simulated = dryRun(context, `send “${text}”`);
   if (simulated) return simulated;

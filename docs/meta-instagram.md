@@ -79,7 +79,25 @@ SocialPilot requests exactly three scopes:
 | --- | --- |
 | `instagram_business_basic` | Required for any call. Grants the profile read used to identify the connected account and list recent media for the post picker. |
 | `instagram_business_manage_comments` | Read comments from webhooks and post replies. |
-| `instagram_business_manage_messages` | Read and send direct messages. |
+| `instagram_business_manage_messages` | Read and send direct messages, including private replies to commenters. |
+
+### Two ways to send a DM, and why both exist
+
+| | Normal DM | Private reply |
+| --- | --- | --- |
+| Endpoint | `POST /me/messages` | `POST /me/messages` |
+| Recipient | `{"id": "<user-id>"}` | `{"comment_id": "<comment-id>"}` |
+| Allowed when | The person messaged the account within **24 hours** | Up to **7 days** after their comment |
+| How many | Unlimited inside the window | **Once per comment, ever** |
+
+This distinction decides whether the product's flagship workflow works at all.
+"Comment PRICE and I'll DM you" targets people who have commented but almost
+certainly have *not* messaged the account in the last day — so the normal
+endpoint rejects nearly every real case.
+
+`engine/actions.ts` therefore routes on the triggering event: a comment or
+mention uses the private reply, a message uses the normal endpoint (where the
+window is open by definition, since the trigger is their message).
 
 `instagram_business_content_publish` is deliberately **not** requested.
 SocialPilot never posts to a feed, and requesting a permission the product does
@@ -301,11 +319,16 @@ These are real limitations, stated plainly rather than hidden:
   runs once at connect and is non-fatal. If it fails, the account stays
   connected but receives no events until the customer reconnects. A background
   reconciliation job would close this.
-- **The 24-hour messaging window is not pre-checked.** Meta rejects a DM sent
-  more than 24 hours after the person last messaged the account. SocialPilot
-  attempts the send and records the rejection on the action result rather than
-  predicting it. The outcome is correct and visible, but it costs an API call
-  and shows the user a failure that could have been a skip.
+- **The one-private-reply-per-comment limit is not pre-checked.** Meta allows a
+  private reply to a given comment exactly once, ever. SocialPilot's
+  idempotency guarantees mean it does not normally try twice, but a workflow
+  edited to add a second DM action, or an event replayed manually, would be
+  rejected by Meta rather than caught locally.
+- **The 24-hour window is not pre-checked for message triggers.** A workflow
+  triggered by a DM replies through the normal messaging endpoint, which Meta
+  rejects if more than 24 hours have passed since that person last wrote. In
+  practice the window is open — the trigger *is* their message — but a queue
+  backlog longer than a day would produce failures rather than skips.
 - **Rate-limit headers are not persisted.** `X-App-Usage` is read for backoff
   decisions but not stored, so there is no dashboard showing how close a
   workspace is to its quota.

@@ -55,6 +55,27 @@ export interface SocialProvider {
     message: string;
   }): Promise<{ id: string }>;
 
+  /**
+   * DMs the author of a comment — Meta's "private reply".
+   *
+   * Distinct from `sendDirectMessage`, and the distinction is load-bearing.
+   * A normal DM is bound by the 24-hour messaging window: it only succeeds if
+   * that person messaged the account within the last day. Somebody who just
+   * commented has almost certainly not, so the flagship "comment PRICE and
+   * I'll DM you" workflow would fail on nearly every real comment.
+   *
+   * A private reply is the exception Meta provides for exactly this: it is
+   * addressed by comment id rather than user id, works for up to 7 days after
+   * the comment, and opens a conversation. It is allowed **once per comment,
+   * ever** — a second attempt is rejected, which is why the engine's
+   * idempotency guarantees matter here rather than being a nicety.
+   */
+  sendPrivateReply(input: {
+    accessToken: string;
+    commentId: string;
+    message: string;
+  }): Promise<{ id: string }>;
+
   likeComment(input: { accessToken: string; commentId: string }): Promise<void>;
 
   /**
@@ -235,6 +256,34 @@ export class InstagramProvider implements SocialProvider {
     });
   }
 
+  /**
+   * Addressed by `comment_id` rather than `id`. Same endpoint as a normal DM —
+   * the recipient shape is the whole difference, and it is what tells Meta to
+   * treat this as a private reply and waive the 24-hour window.
+   */
+  sendPrivateReply({
+    accessToken,
+    commentId,
+    message,
+  }: {
+    accessToken: string;
+    commentId: string;
+    message: string;
+  }): Promise<{ id: string }> {
+    return metaRequest<{ id: string }>(`/${this.config.graphVersion}/me/messages`, {
+      method: "POST",
+      // maxAttempts 1: Meta permits one private reply per comment, ever. A
+      // retry after an ambiguous failure would be rejected anyway, and could
+      // mask a first attempt that actually succeeded.
+      maxAttempts: 1,
+      form: {
+        recipient: JSON.stringify({ comment_id: commentId }),
+        message: JSON.stringify({ text: message }),
+        access_token: accessToken,
+      },
+    });
+  }
+
   async subscribeToWebhooks({ accessToken }: { accessToken: string }) {
     await metaRequest(`/${this.config.graphVersion}/me/subscribed_apps`, {
       method: "POST",
@@ -348,6 +397,12 @@ export class MockInstagramProvider implements SocialProvider {
     this.sent.push({ kind: "dm", payload: input });
     logger.info({ recipientId: input.recipientId }, "[mock] sent direct message");
     return { id: `mock_dm_${randomUUID()}` };
+  }
+
+  async sendPrivateReply(input: { commentId: string; message: string }) {
+    this.sent.push({ kind: "private_reply", payload: input });
+    logger.info({ commentId: input.commentId }, "[mock] sent private reply to commenter");
+    return { id: `mock_private_reply_${randomUUID()}` };
   }
 
   async likeComment(input: { commentId: string }) {
