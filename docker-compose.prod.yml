@@ -24,6 +24,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: ["node", "dist/server.js"]
+    environment:
+      - PORT=5000
     env_file:
       - path: ./backend/.env.production
         required: false
@@ -71,6 +73,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    environment:
+      - PORT=3000
     env_file:
       - path: ./frontend/.env.production
         required: false
