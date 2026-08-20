@@ -7,7 +7,12 @@ services:
       dockerfile: Dockerfile
     command: ["npx", "prisma", "migrate", "deploy"]
     env_file:
-      - ./backend/.env.production
+      - path: ./backend/.env.production
+        required: false
+      - path: ./backend/.env
+        required: false
+      - path: .env
+        required: false
     restart: on-failure
 
   backend-api:
@@ -18,7 +23,12 @@ services:
     ports:
       - "5000:5000"
     env_file:
-      - ./backend/.env.production
+      - path: ./backend/.env.production
+        required: false
+      - path: ./backend/.env
+        required: false
+      - path: .env
+        required: false
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -38,7 +48,12 @@ services:
       dockerfile: Dockerfile
     command: ["node", "dist/worker.js"]
     env_file:
-      - ./backend/.env.production
+      - path: ./backend/.env.production
+        required: false
+      - path: ./backend/.env
+        required: false
+      - path: .env
+        required: false
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -53,7 +68,12 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./frontend/.env.production
+      - path: ./frontend/.env.production
+        required: false
+      - path: ./frontend/.env.local
+        required: false
+      - path: .env
+        required: false
     depends_on:
       - backend-api
     restart: always
