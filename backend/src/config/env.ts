@@ -1,9 +1,11 @@
 import { config as loadDotenv } from "dotenv";
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { EnvironmentError } from "./environment-error.js";
 
 /**
- * Load `.env` before anything reads `process.env`.
+ * Load `.env` or `.env.production` before anything reads `process.env`.
  *
  * This has to happen here rather than in the entry point, because this module
  * validates at import time and is imported by everything — the server, the
@@ -12,13 +14,20 @@ import { EnvironmentError } from "./environment-error.js";
  *
  * `dotenv` does not overwrite variables that are already set, which is the
  * behaviour we want: a real environment variable from the shell, a container,
- * or a hosting platform always wins over the file. In production there is
- * usually no `.env` at all and this call is a no-op.
+ * or a hosting platform always wins over the file.
  *
- * Note that Prisma's CLI loads `.env` on its own — which is why migrations
- * worked before this existed and the server did not.
+ * Checks `process.env.DOTENV_CONFIG_PATH` first, then `.env.production` if `NODE_ENV=production`
+ * and file exists, falling back to `.env`.
  */
-loadDotenv({ quiet: true });
+const customEnvPath = process.env.DOTENV_CONFIG_PATH;
+const prodEnvPath = path.resolve(process.cwd(), ".env.production");
+const targetEnvFile = customEnvPath
+  ? customEnvPath
+  : (process.env.NODE_ENV === "production" && fs.existsSync(prodEnvPath))
+  ? ".env.production"
+  : ".env";
+
+loadDotenv({ path: targetEnvFile, quiet: true });
 
 /**
  * Environment validation runs once, at import time, before the server binds a
