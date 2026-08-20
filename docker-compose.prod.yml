@@ -22,8 +22,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: ["node", "dist/server.js"]
-    ports:
-      - "5000:5000"
     env_file:
       - path: ./backend/.env.production
         required: false
@@ -69,8 +67,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
     env_file:
       - path: ./frontend/.env.production
         required: false
@@ -92,8 +88,6 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes
-    # Removed host port 6379 binding to prevent collisions with host Redis / Dokploy
-    # Containers communicate internally via redis:6379 over Docker network
     volumes:
       - redis-data:/data
     restart: always
