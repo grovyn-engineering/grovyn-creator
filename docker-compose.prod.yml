@@ -92,8 +92,8 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
+    # Removed host port 6379 binding to prevent collisions with host Redis / Dokploy
+    # Containers communicate internally via redis:6379 over Docker network
     volumes:
       - redis-data:/data
     restart: always
@@ -103,12 +103,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Nginx Reverse Proxy & SSL Router ─────────────────────
+  # ── Nginx Reverse Proxy (Optional) ───────────────────────
   nginx:
     image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
